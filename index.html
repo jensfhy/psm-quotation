@@ -4,8 +4,8 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Quotation | Perfect Sign Marketing</title>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
 <style>
 *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
 :root{
@@ -53,7 +53,6 @@ input[type=number].di{text-align:right;font-size:11px}
 .doc-logo-text{font-size:18px;font-weight:900;color:#1a3a5c;letter-spacing:-.5px;align-self:center}
 .doc-title-blk{text-align:right}
 .doc-title{font-size:34px;font-weight:900;color:#1c2b3a;letter-spacing:4px;line-height:1}
-.doc-qt{font-size:10.5px;font-weight:700;color:#2471a3;letter-spacing:1.5px;margin-top:4px;font-family:'Courier New',monospace}
 .doc-rule{height:4px;background:linear-gradient(to right,#1a3a5c,#2471a3 50%,#c0392b);margin:8px 0;border-radius:2px}
 
 /* COMPANY */
@@ -103,6 +102,7 @@ input[type=number].di{text-align:right;font-size:11px}
 .ti:focus{background:var(--ef);box-shadow:0 0 0 2px rgba(36,113,163,.4)}
 
 /* NOTES */
+.doc-bottom{} /* wrapper keeps totals+notes+payment+sig together for page breaks */
 .doc-notes{margin-bottom:13px}
 .notes-title{font-size:11px;font-weight:700;color:#1c2b3a;margin-bottom:5px;text-transform:uppercase;letter-spacing:.4px}
 .notes-body{font-size:10.5px;color:#555;line-height:1.85;white-space:pre-wrap;min-height:40px}
@@ -150,13 +150,21 @@ body.exp .add-tr{display:none!important}
 .toast.show{transform:translateY(0);opacity:1}
 
 @media print{
-  .toolbar{display:none!important}
-  body{padding-top:0;background:#fff}
-  .page-wrap{padding:0}
-  #quotation{box-shadow:none;width:100%;padding:12mm}
+  .toolbar,.modal-bg,.toast{display:none!important}
+  body{padding-top:0!important;background:#fff!important}
+  .page-wrap{padding:0!important;display:block!important}
+  #quotation{box-shadow:none!important;width:100%!important;padding:10mm 14mm!important;min-height:0!important}
   .np,.add-tr{display:none!important}
-  [contenteditable]:hover,[contenteditable]:focus,.di:hover,.di:focus,.ti:hover,.ti:focus{background:transparent!important;box-shadow:none!important}
+  [contenteditable]:hover,[contenteditable]:focus,
+  .di:hover,.di:focus,.ti:hover,.ti:focus{background:transparent!important;box-shadow:none!important}
   [contenteditable]:empty::before{content:''!important}
+  /* Page break controls */
+  .doc-tbl tbody tr{page-break-inside:avoid!important}
+  .totals-wrap{page-break-inside:avoid!important}
+  .doc-notes{page-break-inside:avoid!important}
+  .doc-pay{page-break-inside:avoid!important}
+  .doc-sigs{page-break-inside:avoid!important}
+  .doc-bottom{page-break-inside:avoid!important}
 }
 </style>
 </head>
@@ -213,7 +221,6 @@ body.exp .add-tr{display:none!important}
     </div>
     <div class="doc-title-blk">
       <div class="doc-title">QUOTATION</div>
-      <div class="doc-qt" id="qt-ref">QT-2026-0001</div>
     </div>
   </div>
 
@@ -266,6 +273,7 @@ body.exp .add-tr{display:none!important}
   </table>
 
   <!-- Totals: Subtotal | Discount | Total only -->
+  <div class="doc-bottom">
   <div class="totals-wrap">
     <table class="totals-tbl">
       <tbody>
@@ -293,6 +301,7 @@ body.exp .add-tr{display:none!important}
     </div>
     <div class="sig-right">Thank you for your business.</div>
   </div>
+  </div><!-- /doc-bottom -->
 
 </div>
 </div>
@@ -528,7 +537,6 @@ function calc() {
 function newQuotation() {
   if (!confirm('Start a new quotation? Current entries will be cleared.')) return;
   qtNum = nextQtNum();
-  document.getElementById('qt-ref').textContent = qtNum;
   setText('cl-name', '');
   setText('cl-addr', '');
   setText('cl-pic',  '');
@@ -550,20 +558,19 @@ function exportPDF() {
   btn.textContent = 'Generating...';
   document.body.classList.add('exp');
 
-  /* ── Convert all inputs inside #quotation to plain text spans ── */
+  /* Convert inputs to text spans so html2canvas renders them clearly */
   var quotation = document.getElementById('quotation');
   var inputs = Array.from(quotation.querySelectorAll('input'));
   var saved = inputs.map(function(inp) {
-    var cs  = window.getComputedStyle(inp);
-    var sp  = document.createElement('span');
+    var cs = window.getComputedStyle(inp);
+    var sp = document.createElement('span');
     sp.textContent = inp.value;
-    sp.style.display     = 'inline-block';
-    sp.style.minWidth    = inp.offsetWidth + 'px';
-    sp.style.textAlign   = cs.textAlign;
-    sp.style.fontSize    = '11px';
-    sp.style.fontFamily  = "Arial,'Helvetica Neue',sans-serif";
-    sp.style.color       = '#1c2b3a';
-    sp.style.fontWeight  = cs.fontWeight;
+    sp.style.display    = 'inline-block';
+    sp.style.minWidth   = inp.offsetWidth + 'px';
+    sp.style.textAlign  = cs.textAlign;
+    sp.style.fontSize   = '11px';
+    sp.style.fontFamily = "Arial,'Helvetica Neue',sans-serif";
+    sp.style.color      = '#1c2b3a';
     inp.parentNode.replaceChild(sp, inp);
     return { inp: inp, sp: sp };
   });
@@ -574,26 +581,78 @@ function exportPDF() {
     });
   }
 
+  /* Collect safe page-break Y positions from DOM (between rows / sections) */
+  function getSafeBreaksPx(scaleFactor) {
+    var qRect   = quotation.getBoundingClientRect();
+    var els     = Array.from(quotation.querySelectorAll(
+      'tbody tr:not(.add-tr), .totals-wrap, .doc-notes, .doc-pay, .doc-sigs'
+    ));
+    var pts = [0];
+    els.forEach(function(el) {
+      var r = el.getBoundingClientRect();
+      pts.push((r.top - qRect.top) * scaleFactor);
+      pts.push((r.bottom - qRect.bottom + quotation.offsetHeight) * scaleFactor);
+    });
+    return pts.sort(function(a,b){return a-b;});
+  }
+
   setTimeout(function() {
     var jsPDF = window.jspdf.jsPDF;
-    var el = document.getElementById('quotation');
-    html2canvas(el, {scale:3, useCORS:true, backgroundColor:'#ffffff', logging:false})
+
+    html2canvas(quotation, {scale:3, useCORS:true, backgroundColor:'#ffffff', logging:false})
     .then(function(canvas) {
-      var imgData = canvas.toDataURL('image/png');
-      var pdf = new jsPDF({orientation:'portrait', unit:'mm', format:'a4'});
-      var pw = pdf.internal.pageSize.getWidth();
-      var ph = pdf.internal.pageSize.getHeight();
-      var iw = pw, ih = (canvas.height * pw) / canvas.width;
-      var y = 0, first = true;
-      while (y < ih) {
-        if (!first) pdf.addPage();
-        pdf.addImage(imgData, 'PNG', 0, -y, iw, ih);
-        y += ph; first = false;
+      var imgData  = canvas.toDataURL('image/png');
+      var pdf      = new jsPDF({orientation:'portrait', unit:'mm', format:'a4'});
+      var pageW_mm = pdf.internal.pageSize.getWidth();
+      var pageH_mm = pdf.internal.pageSize.getHeight();
+      /* canvas px per mm */
+      var pxPerMm  = canvas.width / pageW_mm;
+      var pageH_px = pageH_mm * pxPerMm;
+
+      /* safe break points in canvas px */
+      var scaleFactor = canvas.width / quotation.offsetWidth;
+      var safeBreaks  = getSafeBreaksPx(scaleFactor);
+
+      /* Build list of page start/end in canvas px */
+      var pages = [];
+      var cur   = 0;
+      while (cur < canvas.height) {
+        var ideal = cur + pageH_px;
+        if (ideal >= canvas.height) {
+          pages.push({y: cur, h: canvas.height - cur});
+          break;
+        }
+        /* Find largest safe break <= ideal */
+        var best = cur;
+        safeBreaks.forEach(function(pt) {
+          if (pt > cur && pt <= ideal) best = pt;
+        });
+        /* If no safe break found, cut at ideal */
+        if (best === cur) best = ideal;
+        pages.push({y: cur, h: best - cur});
+        cur = best;
       }
+
+      /* Render each page slice into PDF */
+      pages.forEach(function(pg, i) {
+        if (i > 0) pdf.addPage();
+        /* Create a temporary canvas for this slice */
+        var sliceCanvas       = document.createElement('canvas');
+        sliceCanvas.width     = canvas.width;
+        sliceCanvas.height    = Math.ceil(pg.h);
+        var ctx               = sliceCanvas.getContext('2d');
+        ctx.fillStyle         = '#ffffff';
+        ctx.fillRect(0, 0, sliceCanvas.width, sliceCanvas.height);
+        ctx.drawImage(canvas, 0, -pg.y);
+        var sliceData = sliceCanvas.toDataURL('image/png');
+        var sliceH_mm = pg.h / pxPerMm;
+        pdf.addImage(sliceData, 'PNG', 0, 0, pageW_mm, sliceH_mm);
+      });
+
       pdf.save(qtNum + '.pdf');
       showToast('Saved: ' + qtNum + '.pdf \u2713');
     })
-    .catch(function() { alert('Export failed. Try the Print button instead.'); })
+    .catch(function(e) { alert('Export failed. Try the Print button instead.'); })
     .finally(function() {
       restoreInputs();
       document.body.classList.remove('exp');
@@ -615,7 +674,6 @@ function showToast(msg) {
 function init() {
   loadCompanies();
   qtNum = curQtNum();
-  document.getElementById('qt-ref').textContent = qtNum;
 
   var addTr = document.createElement('tr');
   addTr.id = 'add-row-tr';
