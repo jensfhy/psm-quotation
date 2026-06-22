@@ -549,10 +549,35 @@ function exportPDF() {
   btn.disabled = true;
   btn.textContent = 'Generating...';
   document.body.classList.add('exp');
+
+  /* ── Convert all inputs inside #quotation to plain text spans ── */
+  var quotation = document.getElementById('quotation');
+  var inputs = Array.from(quotation.querySelectorAll('input'));
+  var saved = inputs.map(function(inp) {
+    var cs  = window.getComputedStyle(inp);
+    var sp  = document.createElement('span');
+    sp.textContent = inp.value;
+    sp.style.display     = 'inline-block';
+    sp.style.minWidth    = inp.offsetWidth + 'px';
+    sp.style.textAlign   = cs.textAlign;
+    sp.style.fontSize    = '11px';
+    sp.style.fontFamily  = "Arial,'Helvetica Neue',sans-serif";
+    sp.style.color       = '#1c2b3a';
+    sp.style.fontWeight  = cs.fontWeight;
+    inp.parentNode.replaceChild(sp, inp);
+    return { inp: inp, sp: sp };
+  });
+
+  function restoreInputs() {
+    saved.forEach(function(o) {
+      if (o.sp.parentNode) o.sp.parentNode.replaceChild(o.inp, o.sp);
+    });
+  }
+
   setTimeout(function() {
     var jsPDF = window.jspdf.jsPDF;
     var el = document.getElementById('quotation');
-    html2canvas(el, {scale:2.5, useCORS:true, backgroundColor:'#ffffff', logging:false})
+    html2canvas(el, {scale:3, useCORS:true, backgroundColor:'#ffffff', logging:false})
     .then(function(canvas) {
       var imgData = canvas.toDataURL('image/png');
       var pdf = new jsPDF({orientation:'portrait', unit:'mm', format:'a4'});
@@ -570,11 +595,12 @@ function exportPDF() {
     })
     .catch(function() { alert('Export failed. Try the Print button instead.'); })
     .finally(function() {
+      restoreInputs();
       document.body.classList.remove('exp');
       btn.disabled = false;
       btn.innerHTML = '&#x2B07; Export PDF';
     });
-  }, 100);
+  }, 150);
 }
 
 /* ── TOAST ── */
