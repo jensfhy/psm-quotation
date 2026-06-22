@@ -583,17 +583,19 @@ function exportPDF() {
 
   /* Collect safe page-break Y positions from DOM (between rows / sections) */
   function getSafeBreaksPx(scaleFactor) {
-    var qRect   = quotation.getBoundingClientRect();
-    var els     = Array.from(quotation.querySelectorAll(
+    var qRect = quotation.getBoundingClientRect();
+    var els   = Array.from(quotation.querySelectorAll(
       'tbody tr:not(.add-tr), .totals-wrap, .doc-notes, .doc-pay, .doc-sigs'
     ));
     var pts = [0];
     els.forEach(function(el) {
       var r = el.getBoundingClientRect();
-      pts.push((r.top - qRect.top) * scaleFactor);
-      pts.push((r.bottom - qRect.bottom + quotation.offsetHeight) * scaleFactor);
+      /* top edge of this element = safe break point (gap above it) */
+      pts.push((r.top    - qRect.top) * scaleFactor);
+      /* bottom edge of this element = safe break point (gap below it) */
+      pts.push((r.bottom - qRect.top) * scaleFactor);
     });
-    return pts.sort(function(a,b){return a-b;});
+    return pts.sort(function(a, b) { return a - b; });
   }
 
   setTimeout(function() {
