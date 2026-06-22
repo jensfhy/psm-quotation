@@ -558,8 +558,9 @@ function exportPDF() {
   btn.textContent = 'Generating...';
   document.body.classList.add('exp');
 
-  /* Convert inputs to text spans so html2canvas renders them clearly */
   var quotation = document.getElementById('quotation');
+
+  /* Convert inputs to plain text so html2canvas renders them clearly */
   var inputs = Array.from(quotation.querySelectorAll('input'));
   var saved = inputs.map(function(inp) {
     var cs = window.getComputedStyle(inp);
@@ -581,21 +582,19 @@ function exportPDF() {
     });
   }
 
-  /* Collect safe page-break Y positions from DOM (between rows / sections) */
-  function getSafeBreaksPx(scaleFactor) {
-    var qRect = quotation.getBoundingClientRect();
-    var els   = Array.from(quotation.querySelectorAll(
-      'tbody tr:not(.add-tr), .totals-wrap, .doc-notes, .doc-pay, .doc-sigs'
-    ));
-    var pts = [0];
-    els.forEach(function(el) {
+  /* Measure DOM positions AFTER input swap, BEFORE canvas render */
+  var qRect    = quotation.getBoundingClientRect();
+  var notesEl  = quotation.querySelector('.doc-notes');
+  var notesTop = notesEl ? (notesEl.getBoundingClientRect().top - qRect.top) : null;
+
+  function getRowBreaks(scaleFactor) {
+    var pts = [];
+    Array.from(quotation.querySelectorAll('tbody tr:not(.add-tr)')).forEach(function(el) {
       var r = el.getBoundingClientRect();
-      /* top edge of this element = safe break point (gap above it) */
       pts.push((r.top    - qRect.top) * scaleFactor);
-      /* bottom edge of this element = safe break point (gap below it) */
       pts.push((r.bottom - qRect.top) * scaleFactor);
     });
-    return pts.sort(function(a, b) { return a - b; });
+    return pts;
   }
 
   setTimeout(function() {
@@ -603,58 +602,73 @@ function exportPDF() {
 
     html2canvas(quotation, {scale:3, useCORS:true, backgroundColor:'#ffffff', logging:false})
     .then(function(canvas) {
-      var imgData  = canvas.toDataURL('image/png');
       var pdf      = new jsPDF({orientation:'portrait', unit:'mm', format:'a4'});
       var pageW_mm = pdf.internal.pageSize.getWidth();
       var pageH_mm = pdf.internal.pageSize.getHeight();
-      /* canvas px per mm */
       var pxPerMm  = canvas.width / pageW_mm;
       var pageH_px = pageH_mm * pxPerMm;
+      var scale    = canvas.width / quotation.offsetWidth;
 
-      /* safe break points in canvas px */
-      var scaleFactor = canvas.width / quotation.offsetWidth;
-      var safeBreaks  = getSafeBreaksPx(scaleFactor);
+      var notesY         = (notesTop !== null) ? notesTop * scale : null;
+      var rowBreaks      = getRowBreaks(scale);
+      var notesBreakDone = false;
 
-      /* Build list of page start/end in canvas px */
       var pages = [];
       var cur   = 0;
+
       while (cur < canvas.height) {
         var ideal = cur + pageH_px;
+
         if (ideal >= canvas.height) {
-          pages.push({y: cur, h: canvas.height - cur});
+          pages.push({ y: cur, h: canvas.height - cur });
           break;
         }
-        /* Find largest safe break <= ideal */
-        var best = cur;
-        safeBreaks.forEach(function(pt) {
-          if (pt > cur && pt <= ideal) best = pt;
-        });
-        /* If no safe break found, cut at ideal */
-        if (best === cur) best = ideal;
-        pages.push({y: cur, h: best - cur});
-        cur = best;
+
+        var breakAt = null;
+
+        /* NOTES RULE: if Notes starts on this page but the entire bottom
+           section (Notes + Payment + Sig) does not fit in the remaining
+           space, force a break right at the Notes start so everything
+           below flows neatly to the next page. */
+        if (!notesBreakDone && notesY !== null &&
+            notesY > cur && notesY < ideal) {
+          var bottomHeight   = canvas.height - notesY;
+          var roomOnThisPage = ideal - notesY;
+          if (bottomHeight > roomOnThisPage) {
+            breakAt = notesY;
+            notesBreakDone = true;
+          }
+        }
+
+        /* ROW RULE: find the last safe boundary between table rows */
+        if (breakAt === null) {
+          rowBreaks.forEach(function(pt) {
+            if (pt > cur && pt <= ideal) breakAt = pt;
+          });
+        }
+
+        if (breakAt === null) breakAt = ideal;
+
+        pages.push({ y: cur, h: breakAt - cur });
+        cur = breakAt;
       }
 
-      /* Render each page slice into PDF */
       pages.forEach(function(pg, i) {
         if (i > 0) pdf.addPage();
-        /* Create a temporary canvas for this slice */
-        var sliceCanvas       = document.createElement('canvas');
-        sliceCanvas.width     = canvas.width;
-        sliceCanvas.height    = Math.ceil(pg.h);
-        var ctx               = sliceCanvas.getContext('2d');
-        ctx.fillStyle         = '#ffffff';
-        ctx.fillRect(0, 0, sliceCanvas.width, sliceCanvas.height);
+        var sl    = document.createElement('canvas');
+        sl.width  = canvas.width;
+        sl.height = Math.ceil(pg.h);
+        var ctx   = sl.getContext('2d');
+        ctx.fillStyle = '#ffffff';
+        ctx.fillRect(0, 0, sl.width, sl.height);
         ctx.drawImage(canvas, 0, -pg.y);
-        var sliceData = sliceCanvas.toDataURL('image/png');
-        var sliceH_mm = pg.h / pxPerMm;
-        pdf.addImage(sliceData, 'PNG', 0, 0, pageW_mm, sliceH_mm);
+        pdf.addImage(sl.toDataURL('image/png'), 'PNG', 0, 0, pageW_mm, pg.h / pxPerMm);
       });
 
       pdf.save(qtNum + '.pdf');
       showToast('Saved: ' + qtNum + '.pdf \u2713');
     })
-    .catch(function(e) { alert('Export failed. Try the Print button instead.'); })
+    .catch(function() { alert('Export failed. Try the Print button instead.'); })
     .finally(function() {
       restoreInputs();
       document.body.classList.remove('exp');
