@@ -185,6 +185,12 @@ body.exp .add-tr{display:none!important}
   <button class="btn btn-g btn-sm" onclick="openModal('edit')">&#x270F; Edit</button>
   <button class="btn btn-g btn-sm" onclick="openModal('new')">&#xFF0B; Add</button>
   <button class="btn btn-g btn-sm" onclick="deleteCompany()" style="color:#ffaaaa">&#x1F5D1;</button>
+  <div class="tb-sep"></div>
+  <span class="tb-lbl">Doc type:</span>
+  <select class="tb-sel" id="doc-type-sel" style="max-width:160px" onchange="switchDocType(this.value)">
+    <option value="quotation">Quotation</option>
+    <option value="pi">Proforma Invoice</option>
+  </select>
   <div class="spacer"></div>
   <span class="hint">&#x270F; Click any text to edit</span>
   <div class="tb-sep"></div>
@@ -225,7 +231,7 @@ body.exp .add-tr{display:none!important}
       <div id="doc-logo-text" class="doc-logo-text" style="display:none"></div>
     </div>
     <div class="doc-title-blk">
-      <div class="doc-title">QUOTATION</div>
+      <div class="doc-title" id="doc-title">QUOTATION</div>
     </div>
   </div>
 
@@ -257,7 +263,21 @@ body.exp .add-tr{display:none!important}
       Attn:&nbsp;<span contenteditable="true" id="cl-pic" data-ph="PIC Name" spellcheck="false"></span>
     </div>
     <div class="doc-meta">
-      <div class="doc-meta-item"><b>Date:</b>&nbsp;<input type="date" id="doc-date" class="di"></div>
+      <div class="doc-meta-item"><b>Date:</b>&nbsp;<input type="date" id="doc-date" class="di" oninput="onDateChange()"></div>
+    </div>
+    <!-- PROFORMA INVOICE extra fields -->
+    <div id="pi-section" style="display:none;margin-top:8px;padding:8px 10px;background:#f4f7fb;border-radius:6px;border:0.5px solid #d0dae4">
+      <div style="display:flex;flex-wrap:wrap;gap:14px;align-items:center">
+        <div class="doc-meta-item">
+          <b>Proforma Invoice No:</b>&nbsp;
+          <span contenteditable="true" id="pi-no" spellcheck="false"
+            style="font-family:Courier New,monospace;font-size:11px;font-weight:700;color:#2471a3;min-width:120px"
+            data-ph="PI-2026-0001"></span>
+        </div>
+        <div class="doc-meta-item">
+          <b>Validity Date:</b>&nbsp;<input type="date" id="pi-valid" class="di">
+        </div>
+      </div>
     </div>
   </div>
 
@@ -289,7 +309,7 @@ body.exp .add-tr{display:none!important}
 
   <div class="doc-notes">
     <div class="notes-title">Notes:</div>
-    <div contenteditable="true" id="doc-notes" class="notes-body blk" spellcheck="false" data-ph="Add notes here..."></div>
+    <div contenteditable="true" id="doc-notes" class="notes-body blk" spellcheck="false" data-ph="Add notes here..." oninput="notesManual=true"></div>
   </div>
 
   <div class="doc-pay">
@@ -338,6 +358,54 @@ var DEFAULT_NOTES = [
   '\u2022 All quotations given by the Seller are based on the assumption of the validity of the information provided being fully accurate and correct in all circumstances.',
   '\u2022 Pricing is subject to the quantities quoted and the Seller reserves the right to adjust the Unit Price accordingly if a change to quantity is requested by the Buyer.'
 ].join('\n');
+
+
+/* ── PROFORMA INVOICE ── */
+var docType = 'quotation';
+var PI_NOTES = '\u2022 Prices quoted are subject to confirmation and availability.\n\u2022 Payment to be made before production / delivery.';
+var notesManual = false;
+
+function nextPINum() {
+  var yr=new Date().getFullYear(), key='psm_pi_'+yr;
+  var n=(parseInt(localStorage.getItem(key)||'0'))+1;
+  localStorage.setItem(key,n);
+  var num='PI-'+yr+'-'+String(n).padStart(4,'0');
+  localStorage.setItem('psm_pi_cur',num);
+  return num;
+}
+function curPINum() { return localStorage.getItem('psm_pi_cur')||nextPINum(); }
+
+function onDateChange() {
+  if(docType==='pi') setValidityDate();
+}
+function setValidityDate() {
+  var d=document.getElementById('doc-date').value;
+  if(!d) return;
+  var dt=new Date(d+'T00:00:00');
+  dt.setMonth(dt.getMonth()+1);
+  document.getElementById('pi-valid').value=dt.toISOString().split('T')[0];
+}
+
+function switchDocType(type) {
+  docType=type;
+  var titleEl  =document.getElementById('doc-title');
+  var piSec    =document.getElementById('pi-section');
+  var notesEl  =document.getElementById('doc-notes');
+  if(type==='pi') {
+    if(titleEl) titleEl.textContent='PROFORMA INVOICE';
+    if(piSec)   piSec.style.display='';
+    /* Auto-generate PI number if not set */
+    var piNo=document.getElementById('pi-no');
+    if(piNo && !piNo.textContent.trim()) piNo.textContent=nextPINum();
+    setValidityDate();
+    /* Swap notes if not manually edited */
+    if(!notesManual && notesEl) { notesEl.textContent=PI_NOTES; notesManual=false; }
+  } else {
+    if(titleEl) titleEl.textContent='QUOTATION';
+    if(piSec)   piSec.style.display='none';
+    if(!notesManual && notesEl) { notesEl.textContent=DEFAULT_NOTES; notesManual=false; }
+  }
+}
 
 /* ── COMPANIES ── */
 function loadCompanies() {
@@ -660,6 +728,12 @@ function newQuotation() {
   if(!confirm('Start a new quotation? Current entries will be cleared.')) return;
   qtNum=nextQtNum();
   setText('cl-name',''); setText('cl-addr',''); setText('cl-pic','');
+  notesManual=false;
+  /* reset PI fields */
+  var piNo=document.getElementById('pi-no');
+  if(piNo) { piNo.textContent=''; if(docType==='pi') piNo.textContent=nextPINum(); }
+  document.getElementById('pi-valid').value='';
+  if(docType==='pi') setValidityDate();
   document.getElementById('t-disc').value='0';
   rowIds.length=0; rowTypes={};
   var body=document.getElementById('items-body');
@@ -712,7 +786,7 @@ function exportPDF() {
 
   setTimeout(function(){
     var jsPDF=window.jspdf.jsPDF;
-    html2canvas(quotation,{scale:3,useCORS:true,backgroundColor:'#ffffff',logging:false})
+    html2canvas(quotation,{scale:2,useCORS:true,backgroundColor:'#ffffff',logging:false})
     .then(function(canvas){
       var pdf=new jsPDF({orientation:'portrait',unit:'mm',format:'a4'});
       var pw=pdf.internal.pageSize.getWidth(), ph=pdf.internal.pageSize.getHeight();
@@ -739,7 +813,7 @@ function exportPDF() {
         var ctx=sl.getContext('2d');
         ctx.fillStyle='#ffffff'; ctx.fillRect(0,0,sl.width,sl.height);
         ctx.drawImage(canvas,0,-pg.y);
-        pdf.addImage(sl.toDataURL('image/png'),'PNG',0,0,pw,pg.h/ppm);
+        pdf.addImage(sl.toDataURL('image/jpeg',0.82),'PNG',0,0,pw,pg.h/ppm);
       });
       pdf.save(qtNum+'.pdf');
       showToast('Saved: '+qtNum+'.pdf \u2713');
@@ -772,7 +846,7 @@ function init(){
   addTr.innerHTML='<td colspan="7"><button class="add-btn" onclick="addRowUI()">&#xFF0B; Add Product / Service</button></td>';
   document.getElementById('items-body').appendChild(addTr);
   document.getElementById('doc-date').value=new Date().toISOString().split('T')[0];
-  document.getElementById('doc-notes').textContent=DEFAULT_NOTES;
+  document.getElementById('doc-notes').textContent=(docType==='pi')?PI_NOTES:DEFAULT_NOTES; notesManual=false;
   addRow(); addRow(); addRow();
   calc();
 }
